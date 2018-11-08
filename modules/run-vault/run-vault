@@ -22,6 +22,7 @@ function print_usage {
   echo
   echo "Options:"
   echo
+  echo -e " --plugin-dir\tSpecifies the plugin directory to load files from"
   echo -e "  --tls-cert-file\tSpecifies the path to the certificate for TLS. Required. To use a CA certificate, concatenate the primary certificate and the CA certificate together."
   echo -e "  --tls-key-file\tSpecifies the path to the private key for the certificate. Required."
   echo -e "  --port\t\tThe port for Vault to listen on. Optional. Default is $DEFAULT_PORT."
@@ -146,12 +147,19 @@ function generate_vault_config {
   local readonly enable_auto_unseal="${11}"
   local readonly auto_unseal_kms_key_id="${12}"
   local readonly auto_unseal_kms_key_region="${13}"
+  local readonly plugin_dir=$"${14}"
   local readonly config_path="$config_dir/$VAULT_CONFIG_FILE"
 
   local instance_ip_address
   instance_ip_address=$(get_instance_ip_address)
 
   local auto_unseal_config=""
+  if [[ "$plugin_dir" ]]; then
+    plugin_config=$(cat <<EOF
+plugin_directory = "${plugin_dir}"
+EOF
+)
+  fi
   if [[ "$enable_auto_unseal" == "true" ]]; then
     auto_unseal_config=$(cat <<EOF
 seal "awskms" {
@@ -213,6 +221,7 @@ EOF
   echo -e "$listener_config" >> "$config_path"
   echo -e "$s3_config" >> "$config_path"
   echo -e "$consul_storage" >> "$config_path"
+  echo -e "$plugin_config" >> "$config_path"
 
   chown "$user:$user" "$config_path"
 }
@@ -278,6 +287,10 @@ function run {
     case "$key" in
       --tls-cert-file)
         tls_cert_file="$2"
+        shift
+        ;;
+      --plugin-dir)
+        plugin_dir="$2"
         shift
         ;;
       --tls-key-file)
@@ -426,7 +439,8 @@ function run {
       "$s3_bucket_region" \
       "$enable_auto_unseal" \
       "$auto_unseal_kms_key_id" \
-      "$auto_unseal_kms_key_region"
+      "$auto_unseal_kms_key_region" \
+      "$plugin_dir"
   fi
 
   generate_supervisor_config "$SUPERVISOR_CONFIG_PATH" "$config_dir" "$bin_dir" "$log_dir" "$log_level" "$user"
